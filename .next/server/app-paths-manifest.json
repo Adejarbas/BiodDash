@@ -1,0 +1,7 @@
+{
+  "/api/dashboard/indicators/route": "app/api/dashboard/indicators/route.js",
+  "/_not-found/page": "app/_not-found/page.js",
+  "/login/page": "app/login/page.js",
+  "/page": "app/page.js",
+  "/dashboard/page": "app/dashboard/page.js"
+}

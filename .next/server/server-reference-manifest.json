@@ -1,0 +1,39 @@
+{
+  "node": {
+    "00b4a59f3bf676b8182f412b58c2da31fe6e0c35e0": {
+      "workers": {
+        "app/login/page": {
+          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22C%3A%5C%5CUsers%5C%5CAlunos%5C%5CDocuments%5C%5CGitHub%5C%5Cprojeto-biogen-v2-react%5C%5Clib%5C%5Cactions.ts%22%2C%5B%7B%22id%22%3A%2200b4a59f3bf676b8182f412b58c2da31fe6e0c35e0%22%2C%22exportedName%22%3A%22signOut%22%7D%2C%7B%22id%22%3A%22605ba9bb856aa41a4f441ac0bb65059902faeeb997%22%2C%22exportedName%22%3A%22signIn%22%7D%2C%7B%22id%22%3A%2260bca858f1f6df59f5118084c8d855859bc3753775%22%2C%22exportedName%22%3A%22signUp%22%7D%5D%5D%5D&__client_imported__=true!",
+          "async": false
+        }
+      },
+      "layer": {
+        "app/login/page": "action-browser"
+      }
+    },
+    "605ba9bb856aa41a4f441ac0bb65059902faeeb997": {
+      "workers": {
+        "app/login/page": {
+          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22C%3A%5C%5CUsers%5C%5CAlunos%5C%5CDocuments%5C%5CGitHub%5C%5Cprojeto-biogen-v2-react%5C%5Clib%5C%5Cactions.ts%22%2C%5B%7B%22id%22%3A%2200b4a59f3bf676b8182f412b58c2da31fe6e0c35e0%22%2C%22exportedName%22%3A%22signOut%22%7D%2C%7B%22id%22%3A%22605ba9bb856aa41a4f441ac0bb65059902faeeb997%22%2C%22exportedName%22%3A%22signIn%22%7D%2C%7B%22id%22%3A%2260bca858f1f6df59f5118084c8d855859bc3753775%22%2C%22exportedName%22%3A%22signUp%22%7D%5D%5D%5D&__client_imported__=true!",
+          "async": false
+        }
+      },
+      "layer": {
+        "app/login/page": "action-browser"
+      }
+    },
+    "60bca858f1f6df59f5118084c8d855859bc3753775": {
+      "workers": {
+        "app/login/page": {
+          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22C%3A%5C%5CUsers%5C%5CAlunos%5C%5CDocuments%5C%5CGitHub%5C%5Cprojeto-biogen-v2-react%5C%5Clib%5C%5Cactions.ts%22%2C%5B%7B%22id%22%3A%2200b4a59f3bf676b8182f412b58c2da31fe6e0c35e0%22%2C%22exportedName%22%3A%22signOut%22%7D%2C%7B%22id%22%3A%22605ba9bb856aa41a4f441ac0bb65059902faeeb997%22%2C%22exportedName%22%3A%22signIn%22%7D%2C%7B%22id%22%3A%2260bca858f1f6df59f5118084c8d855859bc3753775%22%2C%22exportedName%22%3A%22signUp%22%7D%5D%5D%5D&__client_imported__=true!",
+          "async": false
+        }
+      },
+      "layer": {
+        "app/login/page": "action-browser"
+      }
+    }
+  },
+  "edge": {},
+  "encryptionKey": "QN1kwAVHOWOCsHi7tPQzhCS3HX8KIEg9DnJyH/x5eWc="
+}
