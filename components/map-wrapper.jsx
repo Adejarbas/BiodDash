@@ -10,7 +10,7 @@ const LeafletMap = dynamic(() => import('./leaflet-map.tsx'), {
 
 export default function MapWrapper() {
   return (
-    <div style={{ height: '500px', width: '100%', zIndex: -1 }}>
+    <div style={{ height: '500px', width: '100%', zIndex: 1 }}>
       <LeafletMap />
     </div>
   );

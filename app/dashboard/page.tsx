@@ -9,9 +9,10 @@ import { RecentActivity } from "@/components/recent-activity"
 import { DashboardStats } from "@/components/dashboard-stats"
 import { ExportButtons } from "@/components/export-buttons"
 import { BarChart3, TrendingUp, AlertCircle, FileText, Bell, MapPin } from "lucide-react"
+
 // ...existing code...
 import MapWrapper from "@/components/map-wrapper"
-import BiodigestorMonitoring from "@/components/indicadores-widget"
+import BiodigestorMonitoring from "@/components/biodigestor-monitoring"
 
 
 import dynamic from 'next/dynamic';
@@ -65,9 +66,9 @@ export default async function DashboardPage() {
             </Card>
             <Card className="col-span-3 bio-card">
               <CardHeader>
-                <CardTitle className="text-green-800">Atividades Recentes</CardTitle>
+                <CardTitle className="text-green-800">Manutenções Agendadas</CardTitle>
                 <CardDescription className="text-green-600">
-                  Atividades do biodigestor nos últimos 7 dias
+                  Últimas manutenções agendadas
                 </CardDescription>
               </CardHeader>
               <CardContent>

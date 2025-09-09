@@ -1,4 +1,4 @@
-// File: C:\Users\Alunos\Documents\GitHub\projeto-biogen-v2-react\app\api\dashboard\indicators\route.ts
+// File: C:\Users\Alunos\Documents\GitHub\BiodDash\app\api\dashboard\indicators\route.ts
 import * as entry from '../../../../../../app/api/dashboard/indicators/route.js'
 import type { NextRequest } from 'next/server.js'
 
