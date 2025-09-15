@@ -1,15 +1,14 @@
 "use client"
 
-import { useActionState } from "react"
+import { useActionState, useEffect, useState } from "react"
 import { useFormStatus } from "react-dom"
 import { useRouter } from "next/navigation"
-import { useEffect } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Leaf, Loader2 } from "lucide-react"
+import { Leaf, Loader2, Eye, EyeOff } from "lucide-react"
 import { signIn } from "@/lib/actions"
 
 function SubmitButton() {
@@ -32,6 +31,7 @@ function SubmitButton() {
 export default function LoginPage() {
   const router = useRouter()
   const [state, formAction] = useActionState(signIn, null)
+  const [showPassword, setShowPassword] = useState(false)
 
   useEffect(() => {
     if (state?.success) {
@@ -53,13 +53,11 @@ export default function LoginPage() {
             Entre com suas credenciais para acessar seu dashboard
           </CardDescription>
         </CardHeader>
-
         <form action={formAction}>
           <CardContent className="space-y-4">
             {state?.error && (
               <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">{state.error}</div>
             )}
-
             <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded text-sm">
               <p className="font-medium mb-1">Credenciais de Demonstração:</p>
               <p>
@@ -72,7 +70,6 @@ export default function LoginPage() {
                 Registre-se primeiro com essas credenciais. Login imediato após registro (sem confirmação por email).
               </p>
             </div>
-
             <div className="space-y-2">
               <Label htmlFor="email" className="text-green-700">
                 Email
@@ -81,7 +78,7 @@ export default function LoginPage() {
                 id="email"
                 name="email"
                 type="email"
-                placeholder="m@example.com"
+                placeholder="exemplo@example.com"
                 required
                 className="border-green-200"
               />
@@ -95,7 +92,24 @@ export default function LoginPage() {
                   Esqueceu a senha?
                 </Link>
               </div>
-              <Input id="password" name="password" type="password" required className="border-green-200" />
+              <div className="relative">
+                <Input
+                  id="password"
+                  name="password"
+                  type={showPassword ? "text" : "password"}
+                  required
+                  className="border-green-200 pr-10"
+                />
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-green-700 hover:text-green-900"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? "Ocultar senha" : "Visualizar senha"}
+                >
+                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
             </div>
             <div className="flex items-center space-x-2">
               <input type="checkbox" id="remember" className="h-4 w-4 rounded border-green-300" />

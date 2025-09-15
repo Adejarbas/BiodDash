@@ -1,6 +1,6 @@
 "use client"
 
-import { useActionState } from "react"
+import { useActionState, useEffect } from "react"
 import { useFormStatus } from "react-dom"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -12,7 +12,6 @@ import { signUp } from "@/lib/actions"
 
 function SubmitButton() {
   const { pending } = useFormStatus()
-
   return (
     <Button type="submit" className="w-full bg-green-600 hover:bg-green-700" disabled={pending}>
       {pending ? (
@@ -27,8 +26,14 @@ function SubmitButton() {
   )
 }
 
-export default function RegisterPage() {
+function RegisterPage() {
   const [state, formAction] = useActionState(signUp, null)
+
+  useEffect(() => {
+    if (state?.success) {
+      window.location.href = "/login"
+    }
+  }, [state])
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-green-50 px-4 py-12">
@@ -42,38 +47,72 @@ export default function RegisterPage() {
           <CardTitle className="text-2xl font-bold text-green-800">Criar conta</CardTitle>
           <CardDescription className="text-green-600">Preencha os dados para criar sua conta</CardDescription>
         </CardHeader>
-
         <form action={formAction}>
           <CardContent className="space-y-4">
-            {state?.error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">{state.error}</div>
+            {(state as any)?.error && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">{(state as any).error}</div>
             )}
-
-            {state?.success && (
+            {(state as any)?.success && (
               <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded">
-                {state.success}
+                {(state as any).success}
               </div>
             )}
-
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-green-700">
-                Email
-              </Label>
+              <Label htmlFor="email" className="text-green-700">Email</Label>
+              <Input id="email" name="email" type="email" placeholder="m@example.com" required className="border-green-200" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="password" className="text-green-700">Senha</Label>
+              <Input id="password" name="password" type="password" required className="border-green-200" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="razao_social" className="text-green-700">Razão Social</Label>
+              <Input id="razao_social" name="razao_social" type="text" placeholder="Razão Social da Empresa" required className="border-green-200" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="cnpj" className="text-green-700">CNPJ</Label>
               <Input
-                id="email"
-                name="email"
-                type="email"
-                placeholder="m@example.com"
+                id="cnpj"
+                name="cnpj"
+                type="text"
+                placeholder="00.000.000/0000-00"
                 required
                 className="border-green-200"
+                maxLength={18}
+                onChange={e => {
+                  let v = e.target.value.replace(/\D/g, "");
+                  v = v.replace(/(\d{2})(\d)/, "$1.$2");
+                  v = v.replace(/(\d{3})(\d)/, "$1.$2");
+                  v = v.replace(/(\d{3})(\d)/, "$1/$2");
+                  v = v.replace(/(\d{4})(\d)/, "$1-$2");
+                  e.target.value = v;
+                }}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password" className="text-green-700">
-                Senha
-              </Label>
-              <Input id="password" name="password" type="password" required className="border-green-200" />
+              <Label htmlFor="cep" className="text-green-700">CEP</Label>
+              <Input id="cep" name="cep" type="text" placeholder="00000-000" required className="border-green-200" maxLength={9}
+                onBlur={async (e) => {
+                  const cep = e.target.value.replace(/\D/g, "");
+                  if (cep.length === 8) {
+                    const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+                    const data = await res.json();
+                    if (!data.erro) {
+                      document.getElementById("address")?.setAttribute("value", `${data.logradouro}, ${data.bairro}, ${data.localidade} - ${data.uf}`);
+                    }
+                  }
+                }}
+              />
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="numero" className="text-green-700">Número</Label>
+              <Input id="numero" name="numero" type="text" placeholder="Número" required className="border-green-200" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="address" className="text-green-700">Endereço</Label>
+              <Input id="address" name="address" type="text" placeholder="Rua, Bairro, Cidade - UF" required className="border-green-200" />
+            </div>
+            
           </CardContent>
           <CardFooter className="flex flex-col space-y-4">
             <SubmitButton />
@@ -89,3 +128,5 @@ export default function RegisterPage() {
     </div>
   )
 }
+
+export default RegisterPage;

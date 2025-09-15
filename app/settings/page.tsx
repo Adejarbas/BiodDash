@@ -28,6 +28,10 @@ export default function SettingsPage() {
     city: "",
     state: "",
     zipCode: "",
+    cnpj: "",
+    razao_social: "",
+    numero: "",
+    phone: "",
   })
 
   useEffect(() => {
@@ -49,6 +53,10 @@ export default function SettingsPage() {
             city: userData.city || "",
             state: userData.state || "",
             zipCode: userData.zip_code || "",
+            cnpj: userData.cnpj || "",
+            razao_social: userData.razao_social || "",
+            numero: userData.numero || "",
+            phone: userData.phone || "",
           })
         }
       }
@@ -72,6 +80,10 @@ export default function SettingsPage() {
           city: profileData.city,
           state: profileData.state,
           zip_code: profileData.zipCode,
+          cnpj: profileData.cnpj,
+          razao_social: profileData.razao_social,
+          numero: profileData.numero,
+          phone: profileData.phone,
           updated_at: new Date().toISOString(),
         })
         .eq("id", user.id)
@@ -202,7 +214,7 @@ export default function SettingsPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="name" className="text-green-800">
-                    Nome Completo
+                    Nome do Usuário
                   </Label>
                   <Input
                     id="name"
@@ -213,13 +225,41 @@ export default function SettingsPage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="company" className="text-green-800">
-                    Nome da Empresa
+                    Nome Fantasia
                   </Label>
                   <Input
                     id="company"
                     value={profileData.company}
                     onChange={(e) => setProfileData((prev) => ({ ...prev, company: e.target.value }))}
                     className="border-green-300 focus:border-green-500"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="razao_social" className="text-green-800">Razão Social</Label>
+                  <Input
+                    id="razao_social"
+                    value={profileData.razao_social}
+                    onChange={(e) => setProfileData((prev) => ({ ...prev, razao_social: e.target.value }))}
+                    className="border-green-300 focus:border-green-500"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="cnpj" className="text-green-800">CNPJ</Label>
+                  <Input
+                    id="cnpj"
+                    value={profileData.cnpj}
+                    onChange={(e) => {
+                      let v = e.target.value.replace(/\D/g, "");
+                      v = v.replace(/(\d{2})(\d)/, "$1.$2");
+                      v = v.replace(/(\d{3})(\d)/, "$1.$2");
+                      v = v.replace(/(\d{3})(\d)/, "$1/$2");
+                      v = v.replace(/(\d{4})(\d)/, "$1-$2");
+                      setProfileData((prev) => ({ ...prev, cnpj: v }));
+                    }}
+                    className="border-green-300 focus:border-green-500"
+                    placeholder="00.000.000/0000-00"
                   />
                 </div>
               </div>
@@ -240,19 +280,29 @@ export default function SettingsPage() {
               {/* Address Fields Section */}
               <div className="space-y-4">
                 <h3 className="text-lg font-medium text-green-800">Endereço da Empresa</h3>
-                <div className="space-y-2">
-                  <Label htmlFor="address" className="text-green-800">
-                    Endereço Completo
-                  </Label>
-                  <Input
-                    id="address"
-                    value={profileData.address}
-                    onChange={(e) => setProfileData((prev) => ({ ...prev, address: e.target.value }))}
-                    className="border-green-300 focus:border-green-500"
-                    placeholder="Rua, número, bairro"
-                  />
-                </div>
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-4 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="address" className="text-green-800">
+                      Endereço Completo
+                    </Label>
+                    <Input
+                      id="address"
+                      value={profileData.address}
+                      onChange={(e) => setProfileData((prev) => ({ ...prev, address: e.target.value }))}
+                      className="border-green-300 focus:border-green-500"
+                      placeholder="Rua, número, bairro"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="numero" className="text-green-800">Número</Label>
+                    <Input
+                      id="numero"
+                      value={profileData.numero}
+                      onChange={(e) => setProfileData((prev) => ({ ...prev, numero: e.target.value }))}
+                      className="border-green-300 focus:border-green-500"
+                      placeholder="Número"
+                    />
+                  </div>
                   <div className="space-y-2">
                     <Label htmlFor="city" className="text-green-800">
                       Cidade
@@ -282,11 +332,34 @@ export default function SettingsPage() {
                     <Input
                       id="zipCode"
                       value={profileData.zipCode}
-                      onChange={(e) => setProfileData((prev) => ({ ...prev, zipCode: e.target.value }))}
+                      onChange={(e) => {
+                        let v = e.target.value.replace(/\D/g, "");
+                        v = v.replace(/(\d{5})(\d)/, "$1-$2");
+                        setProfileData((prev) => ({ ...prev, zipCode: v }));
+                      }}
                       className="border-green-300 focus:border-green-500"
+                      placeholder="00000-000"
                     />
                   </div>
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="phone" className="text-green-800">
+                  Telefone
+                </Label>
+                <Input
+                  id="phone"
+                  value={profileData.phone || ""}
+                  onChange={(e) => {
+                    let v = e.target.value.replace(/\D/g, "");
+                    v = v.replace(/(\d{2})(\d)/, "($1) $2");
+                    v = v.replace(/(\d{5})(\d)/, "$1-$2");
+                    setProfileData((prev) => ({ ...prev, phone: v }));
+                  }}
+                  className="border-green-300 focus:border-green-500"
+                  placeholder="(00) 00000-0000"
+                />
               </div>
 
               <Button type="submit" disabled={isLoading} className="bg-green-600 hover:bg-green-700">
