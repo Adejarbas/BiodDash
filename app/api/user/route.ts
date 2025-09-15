@@ -14,7 +14,10 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 })
     }
 
-    const { data: userProfile, error } = await supabase.from("users").select("*").eq("id", user.id).single()
+    if (!('from' in supabase)) {
+      return NextResponse.json({ success: false, message: "Supabase client não configurado corretamente." }, { status: 500 });
+    }
+    const { data: userProfile, error } = await supabase.from("users").select("*").eq("id", user.id).single();
 
     if (error && error.code !== "PGRST116") {
       // PGRST116 = no rows returned
@@ -60,6 +63,9 @@ export async function PUT(request: Request) {
     const { full_name, company_name, address, phone, profile_image_url } = body
 
     // Upsert user profile
+    if (!('from' in supabase)) {
+      return NextResponse.json({ success: false, message: "Supabase client não configurado corretamente." }, { status: 500 });
+    }
     const { data, error } = await supabase
       .from("users")
       .upsert({
@@ -73,7 +79,7 @@ export async function PUT(request: Request) {
         updated_at: new Date().toISOString(),
       })
       .select()
-      .single()
+      .single();
 
     if (error) {
       console.error("Database error:", error)
