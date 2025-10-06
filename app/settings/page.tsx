@@ -14,6 +14,8 @@ import { DashboardShell } from "@/components/dashboard-shell"
 import { useToast } from "@/hooks/use-toast"
 import { supabase } from "@/lib/supabase/client"
 
+import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+
 const STORAGE_BUCKET = "avatars" // <-- troque para o nome exato do bucket (ex.: "avatars")
 
 type ToastVariant = "default" | "destructive"
@@ -121,6 +123,31 @@ export default function SettingsPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [user, setUser] = useState<any>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+
+  const [isOpen, setIsOpen] = useState(false);
+  const [titulo, setTitulo] = useState("");
+  const [descricao, setDescricao] = useState("");
+  const [estrelas, setEstrelas] = useState(0);
+
+  // Função para salvar avaliação no localStorage
+  const handleEnviarAvaliacao = () => {
+    const novaAvaliacao = {
+      titulo,
+      descricao,
+      estrelas,
+      usuario: profileData.name || "Usuário",
+      foto: profileData.avatar
+    };
+    const avaliacoes = JSON.parse(localStorage.getItem("avaliacoes") || "[]");
+    avaliacoes.push(novaAvaliacao);
+    localStorage.setItem("avaliacoes", JSON.stringify(avaliacoes));
+    setIsOpen(false);
+    setTitulo("");
+    setDescricao("");
+    setEstrelas(0);
+  };
+
+
 
   const [profileData, setProfileData] = useState({
     name: "",
@@ -395,8 +422,73 @@ export default function SettingsPage() {
     fileInputRef.current?.click()
   }
 
+
+
   return (
     <DashboardShell>
+
+      <div className="flex justify-end w-full mt-4 mb-2 pr-8">
+      <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      <DialogTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          className="border-2 border-green-600"
+          onClick={() => setIsOpen(true)}
+        >
+          Avalie nosso Sistema
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Deixe sua avaliação</DialogTitle>
+        </DialogHeader>
+        <form className="space-y-4">
+          <div>
+            <Label htmlFor="titulo">Título</Label>
+            <Input
+              id="titulo"
+              value={titulo}
+              onChange={e => setTitulo(e.target.value)}
+              placeholder="Ex: Ótimo sistema!"
+              required
+            />
+          </div>
+          <div>
+            <Label htmlFor="descricao">Descrição</Label>
+            <textarea
+              id="descricao"
+              className="w-full border rounded p-2"
+              value={descricao}
+              onChange={e => setDescricao(e.target.value)}
+              placeholder="Conte sua experiência..."
+              required
+            />
+          </div>
+          <div>
+            <Label>Nota</Label>
+            <div className="flex gap-1">
+              {[1,2,3,4,5].map(star => (
+                <span
+                  key={star}
+                  className={star <= estrelas ? "text-yellow-400 cursor-pointer text-2xl" : "text-gray-300 cursor-pointer text-2xl"}
+                  onClick={() => setEstrelas(star)}
+                  role="button"
+                  aria-label={`Dar ${star} estrela${star > 1 ? 's' : ''}`}
+                >★</span>
+              ))}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" onClick={handleEnviarAvaliacao}>
+              Enviar avaliação
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+      </Dialog>
+      </div>
+
       <DashboardHeader heading="Configurações" text="Gerencie suas informações pessoais e configurações da conta" />
 
       <div className="grid gap-6">

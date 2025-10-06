@@ -14,7 +14,16 @@ export default function Home() {
   const [loadingPlan, setLoadingPlan] = useState<{[key:number]: boolean}>({});
   const [errorPlan, setErrorPlan] = useState<{[key:number]: string}>({});
 
-  // Exemplo: buscar dados do usuário autenticado ao carregar a página
+  // Estado para avaliações dinâmicas
+  type Avaliacao = {
+  titulo: string;
+  descricao: string;
+  estrelas: number;
+  usuario: string;
+  foto?: string | null;
+};
+const [avaliacoes, setAvaliacoes] = useState<Avaliacao[]>([]);
+  // Buscar dados do usuário autenticado ao carregar a página
   useEffect(() => {
     setUserLoading(true);
     fetch("/api/user")
@@ -28,6 +37,14 @@ export default function Home() {
       })
       .catch(() => setUserError("Erro de conexão ao buscar usuário"))
       .finally(() => setUserLoading(false));
+  }, []);
+
+  // Carregar avaliações do localStorage ao abrir a página
+  useEffect(() => {
+    const stored = localStorage.getItem("avaliacoes");
+    if (stored) {
+      setAvaliacoes(JSON.parse(stored));
+    }
   }, []);
 
   const handleCheckoutPlano = async (valor: number) => {
@@ -138,6 +155,42 @@ export default function Home() {
                   )}
                 </div>
               ))}
+            </div>
+          </div>
+        </section>
+        {/* Seção de avaliações dos usuários */}
+        <section id="avaliacoes" className="py-12 md:py-24 lg:py-32 bg-white">
+          <div className="container px-4 md:px-6">
+            <div className="max-w-7xl mx-auto p-12 bg-white rounded shadow-lg border-t-4 border-green-400">
+              <h2 className="text-3xl font-bold mb-8 text-green-700 text-center">Avaliações dos Usuários</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12">
+                {avaliacoes.length > 0 ? (
+                  avaliacoes.map((av, idx) => (
+                    <div key={idx} className="border border-gray-200 rounded-lg p-10 min-h-[320px] min-w-[220px] flex flex-col items-center justify-start bg-gray-50 shadow-md">
+                      {/* Espaço centralizado para foto do cliente (mock visual) */}
+                      <div className="flex justify-center items-center w-24 h-24 rounded-full bg-green-100 border-2 border-green-300 mb-4">
+                        {av.foto ? (
+                          <img src={av.foto} alt={av.usuario} className="w-20 h-20 rounded-full object-cover" />
+                        ) : (
+                          <div className="w-20 h-20 rounded-full bg-gray-200 flex items-center justify-center text-gray-500">
+                            <span className="text-2xl">👤</span>
+                          </div>
+                        )}
+                      </div>
+                      <span className="font-semibold text-green-800 mb-2 text-center">{av.usuario}</span>
+                      <span className="flex mb-2">
+                        {[1,2,3,4,5].map(star => (
+                          <span key={star} className={star <= av.estrelas ? "text-yellow-400 text-xl" : "text-gray-300 text-xl"}>★</span>
+                        ))}
+                      </span>
+                      <div className="font-bold mb-2 whitespace-nowrap">{av.titulo}</div>
+                      <div className="text-gray-700">{av.descricao}</div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="col-span-4 text-center text-gray-400 text-lg">Nenhuma avaliação cadastrada ainda.</div>
+                )}
+              </div>
             </div>
           </div>
         </section>
