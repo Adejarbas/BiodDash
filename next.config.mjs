@@ -1,5 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  //Evita multiplas montagens no dev mode
+  reactStrictMode: false,
   eslint: {
     ignoreDuringBuilds: true,
   },
@@ -9,6 +11,7 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  
 }
 
 export default nextConfig

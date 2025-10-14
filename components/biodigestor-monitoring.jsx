@@ -10,6 +10,8 @@ const BiodigestorMonitoring = () => {
   const [ph, setPh] = useState(7.0)
   const [showAlert, setShowAlert] = useState(false)
   const [timeElapsed, setTimeElapsed] = useState(0)
+  const [emailSent, setEmailSent] = useState(false);
+
 
   const modalRef = useRef(null)
   const openSupport = () => modalRef.current?.open()
@@ -22,7 +24,21 @@ const BiodigestorMonitoring = () => {
       if (timeElapsed >= 5 && timeElapsed < 10) {
         setTemperature((prev) => {
           const newTemp = prev + 1.5
-          if (newTemp > 40) setShowAlert(true)
+          if (newTemp > 40 && !emailSent) {
+              setShowAlert(true);
+              setEmailSent(true);
+
+              // envia o alerta por e-mail
+              fetch("/api/alert-email", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ temperature: newTemp }),
+              }).catch((err) => console.error("Falha ao enviar alerta:", err));
+            } else if (newTemp < 36) {
+              setShowAlert(false);
+              setEmailSent(false); // reseta quando esfria
+            }
+
           return newTemp
         })
       } else if (timeElapsed >= 10) {

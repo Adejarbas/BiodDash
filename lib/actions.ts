@@ -116,6 +116,44 @@ export async function signUp(prevState: any, formData: FormData) {
   }
 }
 
+export async function signIn(prevState: any, formData: FormData) {
+  // Basic validation
+  if (!formData) {
+    return { error: "Form data is missing" }
+  }
+
+  const email = formData.get("email")
+  const password = formData.get("password")
+
+  if (!email || !password) {
+    return { error: "Email and password are required" }
+  }
+
+  const cookieStore = cookies()
+  const supabase = createServerActionClient({ cookies: () => cookieStore })
+
+  try {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email.toString(),
+      password: password.toString(),
+    })
+
+    if (error) {
+      return { error: error.message }
+    }
+
+    if (data && (data.user || data.session)) {
+      // successful sign in; client will redirect
+      return { success: "Autenticado com sucesso" }
+    }
+
+    return { error: "Credenciais inválidas" }
+  } catch (err) {
+    console.error("Sign in error:", err)
+    return { error: "An unexpected error occurred. Please try again." }
+  }
+}
+
 export async function signOut() {
   const cookieStore = cookies()
   const supabase = createServerActionClient({ cookies: () => cookieStore })

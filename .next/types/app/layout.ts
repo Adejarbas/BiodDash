@@ -1,4 +1,4 @@
-// File: C:\Users\Alunos\Documents\GitHub\BiodDash\app\layout.tsx
+// File: C:\Users\Alunos\Desktop\BiodDash\app\layout.tsx
 import * as entry from '../../../app/layout.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 
