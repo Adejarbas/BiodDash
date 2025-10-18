@@ -11,7 +11,7 @@ import { BarChart3, TrendingUp, AlertCircle, FileText, Bell, MapPin } from "luci
 import MapWrapper from "@/components/map-wrapper"
 import BiodigestorMonitoring from "@/components/biodigestor-monitoring"
 
-/* ===== Helpers de data/formatos (iguais) ===== */
+/* ===== Helpers de data/formatos ===== */
 const fmtBRNumber = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 2 })
 const fmtBRInt = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 })
 const fmtBRCurrency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" })
@@ -22,6 +22,7 @@ function addDays(d: Date, n: number) { const x = new Date(d); x.setDate(x.getDat
 function startOfMonth(d: Date) { return new Date(d.getFullYear(), d.getMonth(), 1) }
 function startOfNextMonth(d: Date) { return new Date(d.getFullYear(), d.getMonth() + 1, 1) }
 
+/* ===== Tipos ===== */
 type IndicatorRow = {
   energy_generated: number | null
   waste_processed: number | null
@@ -31,13 +32,25 @@ type IndicatorRow = {
   created_at?: string | null
 }
 
+/* ===== Constantes/Helpers adicionais ===== */
+// Fator de CO2 evitado por kWh (toneladas/kWh). Ajuste via env: CO2_TON_PER_KWH=0.00007 (70 g/kWh) por exemplo.
+const CO2_TON_PER_KWH = Number(process.env.CO2_TON_PER_KWH ?? "0.00007")
+
+function getDayKey(d: Date) {
+  return d.toISOString().slice(0, 10) // YYYY-MM-DD
+}
+
+function ensureDateISO(row: IndicatorRow) {
+  return row.measured_at ?? row.created_at ?? null
+}
+
+/* ===== Queries ===== */
 async function fetchRange(
   supabase: import("@supabase/supabase-js").SupabaseClient,
   fromISO: string,
   toISO: string,
   filters?: { userId?: string }
 ) {
-  // 🔄 Agora lendo de public.biodigester_indicators
   let q = supabase
     .from("biodigester_indicators")
     .select("energy_generated, waste_processed, tax_savings, efficiency, measured_at, created_at")
@@ -49,7 +62,7 @@ async function fetchRange(
 
   let { data, error } = await q
   if (error) {
-    // fallback para created_at (se measured_at estiver ausente)
+    // fallback para created_at caso measured_at não exista
     let fb = supabase
       .from("biodigester_indicators")
       .select("energy_generated, waste_processed, tax_savings, efficiency, measured_at, created_at")
@@ -80,7 +93,6 @@ async function fetchLatest(
 
   let { data, error } = await q
   if (error || !data?.length) {
-    // fallback para created_at
     let fb = supabase
       .from("biodigester_indicators")
       .select("energy_generated, waste_processed, tax_savings, efficiency, measured_at, created_at")
@@ -96,6 +108,7 @@ async function fetchLatest(
   return data[0] as IndicatorRow | undefined
 }
 
+/* ===== Agregações e métricas derivadas ===== */
 function sum(rows: IndicatorRow[]) {
   let energy = 0, waste = 0, tax = 0, effTotal = 0, effCount = 0
   for (const r of rows) {
@@ -110,6 +123,27 @@ function sum(rows: IndicatorRow[]) {
   return { energy, waste, tax, avgEff }
 }
 
+function calcCO2AvoidedTonByEnergyKWh(energyKWh: number) {
+  return energyKWh * CO2_TON_PER_KWH
+}
+
+function calcMonthUptimePercent(rows: IndicatorRow[], monthStart: Date, monthEndExcl: Date) {
+  const totalDays = Math.max(
+    1,
+    Math.ceil((+monthEndExcl - +monthStart) / (1000 * 60 * 60 * 24))
+  )
+  const daysWithData = new Set<string>()
+  for (const r of rows) {
+    const iso = ensureDateISO(r)
+    if (!iso) continue
+    const d = new Date(iso)
+    if (d >= monthStart && d < monthEndExcl) {
+      daysWithData.add(getDayKey(d))
+    }
+  }
+  return (daysWithData.size / totalDays) * 100
+}
+
 export const dynamic = "force-dynamic" // garante cookies/session no SSR
 
 export default async function DashboardPage() {
@@ -122,7 +156,7 @@ export default async function DashboardPage() {
 
   const realSupabase = supabase as import("@supabase/supabase-js").SupabaseClient
 
-  // (Opcional) Perfil (para mapa)
+  // Perfil (para mapa)
   const { data: userProfile } = await realSupabase
     .from("user_profiles")
     .select("address, company, city, state, zip_code")
@@ -142,10 +176,10 @@ export default async function DashboardPage() {
   const monthFrom = startOfMonth(today)
   const monthTo = startOfNextMonth(today)
 
-  // Se tiver RLS por usuário, mantenha o filtro:
-  const filters = { userId: user.id } // remova se não usar RLS por user_id
+  // Filtro por usuário (RLS)
+  const filters = { userId: user.id }
 
-  // Leitura do banco (agora da biodigester_indicators)
+  // Leitura do banco
   const [weekRows, prevWeekRows, monthRows, latestRow] = await Promise.all([
     fetchRange(realSupabase, weekFrom.toISOString(), weekTo.toISOString(), filters),
     fetchRange(realSupabase, prevWeekFrom.toISOString(), prevWeekTo.toISOString(), filters),
@@ -157,12 +191,15 @@ export default async function DashboardPage() {
   const prevWeekAgg = sum(prevWeekRows)
   const monthAgg = sum(monthRows)
 
+  // Deltas semanais
   const pct = (curr: number, prev: number) => (prev ? ((curr - prev) / prev) * 100 : null)
   const energyWeekDelta = pct(weekAgg.energy, prevWeekAgg.energy)
   const wasteWeekDelta = pct(weekAgg.waste, prevWeekAgg.waste)
 
+  // Eficiência atual (último registro) ou média do mês
   const effCurrent = latestRow?.efficiency ?? (monthAgg.avgEff !== null ? monthAgg.avgEff : null)
 
+  // Labels
   const monthLabel = fmtMonthLong.format(monthFrom)
   const weekLabel = `${weekFrom.toLocaleDateString("pt-BR")} - ${addDays(weekTo, -1).toLocaleDateString("pt-BR")}`
 
@@ -184,12 +221,18 @@ export default async function DashboardPage() {
   const weekEnergyStr = fmtBRInt.format(Math.round(weekAgg.energy)) + " kWh"
   const weekEffStr = weekAgg.avgEff === null ? "—" : `${fmtBRNumber.format(weekAgg.avgEff)}%`
 
+  // ===== Métricas dinâmicas adicionais =====
+  const uptimeMonth = calcMonthUptimePercent(monthRows, monthFrom, monthTo)
+  const uptimeMonthStr = isFinite(uptimeMonth) ? `${fmtBRNumber.format(uptimeMonth)}%` : "—"
+
+  const monthCO2Ton = calcCO2AvoidedTonByEnergyKWh(monthAgg.energy)
+  const monthCO2TonStr = `${fmtBRNumber.format(monthCO2Ton)} t`
+
   return (
     <DashboardShell>
       <DashboardHeader heading="Dashboard do Biodigestor" text="Monitore e gerencie o desempenho do seu biodigestor" />
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {/* Este componente client pode continuar como está (se já foi adaptado para o banco) */}
         <DashboardStats />
       </div>
 
@@ -209,7 +252,6 @@ export default async function DashboardPage() {
                 <CardTitle className="text-green-800">Visão Geral de Desempenho</CardTitle>
               </CardHeader>
               <CardContent className="pl-2">
-                {/* Overview já foi adaptado no cliente para ler do banco */}
                 <Overview />
               </CardContent>
             </Card>
@@ -231,7 +273,6 @@ export default async function DashboardPage() {
                 <MapPin className="h-5 w-5" />
                 Localização da Empresa
               </CardTitle>
-              <CardDescription className="text-green-600">Localização do biodigestor e instalações da empresa</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="w-full z-[0]">
@@ -302,16 +343,16 @@ export default async function DashboardPage() {
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="text-center">
-                  <div className="text-3xl font-bold text-green-800">98.5%</div>
-                  <div className="text-sm text-green-600">Uptime do Sistema</div>
+                  <div className="text-3xl font-bold text-green-800">{uptimeMonthStr}</div>
+                  <div className="text-sm text-green-600">Uptime do Sistema (mês)</div>
                 </div>
                 <div className="text-center">
                   <div className="text-3xl font-bold text-green-800">{monthTaxStr}</div>
                   <div className="text-sm text-green-600">Economia Fiscal (mês)</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-3xl font-bold text-green-800">15.2 t</div>
-                  <div className="text-sm text-green-600">CO₂ Evitado</div>
+                  <div className="text-3xl font-bold text-green-800">{monthCO2TonStr}</div>
+                  <div className="text-sm text-green-600">CO₂ Evitado (mês)</div>
                 </div>
               </div>
             </CardContent>
@@ -411,7 +452,7 @@ export default async function DashboardPage() {
           </Card>
         </TabsContent>
 
-        {/* NOTIFICATIONS (permanece ilustrativo) */}
+        {/* NOTIFICATIONS (ilustrativo) */}
         <TabsContent value="notifications" className="space-y-4">
           <Card className="bio-card">
             <CardHeader>
