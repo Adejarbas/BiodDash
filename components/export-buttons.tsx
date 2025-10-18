@@ -3,75 +3,146 @@
 import { Button } from "@/components/ui/button"
 import { Download, FileText, FileSpreadsheet } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { supabase } from "@/lib/supabase/client"
+import { useCallback } from "react"
 
 interface ExportButtonsProps {
-  data?: any[]
+  data?: Array<{ date: string; activity: string; status: string; value?: string }>
   filename?: string
 }
+
+type IndicatorRow = {
+  energy_generated: number | null
+  waste_processed: number | null
+  tax_savings: number | null
+  efficiency: number | null
+  measured_at?: string | null
+  created_at?: string | null
+}
+
+const fmtNum = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 2 })
+const fmtInt = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 })
+const fmtBRL = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" })
+const fmtDate = (d: Date) => d.toLocaleDateString("pt-BR")
+
+function startOfDay(d: Date) { const x = new Date(d); x.setHours(0,0,0,0); return x }
+function addDays(d: Date, n: number) { const x = new Date(d); x.setDate(x.getDate() + n); return x }
+function startOfMonth(d: Date) { return new Date(d.getFullYear(), d.getMonth(), 1) }
+function startOfNextMonth(d: Date) { return new Date(d.getFullYear(), d.getMonth() + 1, 1) }
 
 export function ExportButtons({ data = [], filename = "biodigester-report" }: ExportButtonsProps) {
   const { toast } = useToast()
 
-  const exportToPDF = async () => {
-<<<<<<< Updated upstream
-    try {
-      const reportData = {
-        title: "Relatório do Biodigestor",
-        date: new Date().toLocaleDateString("pt-BR"),
-        stats: {
-          wasteProcessed: "2,450 kg",
-          energyGenerated: "1,850 kWh",
-          efficiency: "92%",
-          taxSavings: "R$ 3,240",
-        },
-        activities:
-          data.length > 0
-            ? data
-            : [
-                { date: "2024-01-15", activity: "Manutenção preventiva realizada", status: "Concluído" },
-                { date: "2024-01-14", activity: "Produção de energia: 125 kWh", status: "Normal" },
-                { date: "2024-01-13", activity: "Processamento de resíduos: 180 kg", status: "Normal" },
-              ],
-      }
+  /** Lê do Supabase e monta os dados do relatório (mês atual + últimos 7 dias como atividades) */
+  const buildReportData = useCallback(async () => {
+    const { data: auth } = await supabase.auth.getUser()
+    const userId = auth?.user?.id
 
-      // Simulate PDF generation
-      const pdfContent = `
-        ${reportData.title}
-        Data: ${reportData.date}
-        
-        ESTATÍSTICAS:
-        - Resíduos Processados: ${reportData.stats.wasteProcessed}
-        - Energia Gerada: ${reportData.stats.energyGenerated}
-        - Eficiência: ${reportData.stats.efficiency}
-        - Economia Fiscal: ${reportData.stats.taxSavings}
-        
-        ATIVIDADES RECENTES:
-        ${reportData.activities
-          .map((activity) => `${activity.date} - ${activity.activity} (${activity.status})`)
-          .join("\n")}
-      `
+    const now = new Date()
+    const today = startOfDay(now)
+    const monthFrom = startOfMonth(today)
+    const monthTo = startOfNextMonth(today)
+    const weekFrom = startOfDay(addDays(today, -6))
+    const weekTo = addDays(today, 1)
 
-      const blob = new Blob([pdfContent], { type: "text/plain" })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement("a")
-      a.href = url
-      a.download = `${filename}.pdf`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
+    const selectCols =
+      "energy_generated, waste_processed, tax_savings, efficiency, measured_at, created_at"
 
-      toast({
-        title: "PDF exportado",
-        description: "Relatório em PDF foi baixado com sucesso.",
-      })
-    } catch (error) {
-      toast({
-        title: "Erro na exportação",
-        description: "Não foi possível exportar o PDF.",
-        variant: "destructive",
-      })
-=======
+    // MÊS
+    let qMonth = supabase
+      .from("biodigester_indicators")
+      .select(selectCols)
+      .gte("measured_at", monthFrom.toISOString())
+      .lt("measured_at", monthTo.toISOString())
+      .order("measured_at", { ascending: true })
+    if (userId) qMonth = qMonth.eq("user_id", userId)
+
+    let { data: monthRows, error: mErr } = await qMonth
+    if (mErr) {
+      let fb = supabase
+        .from("biodigester_indicators")
+        .select(selectCols)
+        .gte("created_at", monthFrom.toISOString())
+        .lt("created_at", monthTo.toISOString())
+        .order("created_at", { ascending: true })
+      if (userId) fb = fb.eq("user_id", userId)
+      const res = await fb
+      if (res.error) throw res.error
+      monthRows = res.data as IndicatorRow[]
+    }
+
+    // SEMANA (atividades)
+    let qWeek = supabase
+      .from("biodigester_indicators")
+      .select(selectCols)
+      .gte("measured_at", weekFrom.toISOString())
+      .lt("measured_at", weekTo.toISOString())
+      .order("measured_at", { ascending: false })
+    if (userId) qWeek = qWeek.eq("user_id", userId)
+
+    let { data: weekRows, error: wErr } = await qWeek
+    if (wErr) {
+      let fb = supabase
+        .from("biodigester_indicators")
+        .select(selectCols)
+        .gte("created_at", weekFrom.toISOString())
+        .lt("created_at", weekTo.toISOString())
+        .order("created_at", { ascending: false })
+      if (userId) fb = fb.eq("user_id", userId)
+      const res = await fb
+      if (res.error) throw res.error
+      weekRows = res.data as IndicatorRow[]
+    }
+
+    // Agregações do mês
+    const monthAgg = (monthRows ?? []).reduce(
+      (acc, r) => {
+        acc.energy += Number(r.energy_generated ?? 0)
+        acc.waste += Number(r.waste_processed ?? 0)
+        acc.tax += Number(r.tax_savings ?? 0)
+        if (r.efficiency !== null && r.efficiency !== undefined) {
+          acc.effSum += Number(r.efficiency)
+          acc.effCount++
+        }
+        return acc
+      },
+      { energy: 0, waste: 0, tax: 0, effSum: 0, effCount: 0 }
+    )
+    const monthEff = monthAgg.effCount ? monthAgg.effSum / monthAgg.effCount : null
+
+    const activities =
+      data.length > 0
+        ? data
+        : (weekRows ?? []).slice(0, 10).map((r) => {
+            const when = r.measured_at ?? r.created_at
+            return {
+              date: when ? fmtDate(new Date(when)) : "",
+              activity: `Energia: ${fmtInt.format(Number(r.energy_generated ?? 0))} kWh • Resíduos: ${fmtInt.format(
+                Number(r.waste_processed ?? 0)
+              )} kg`,
+              status: "Registrado",
+              value: r.tax_savings != null ? fmtBRL.format(Number(r.tax_savings)) : "",
+            }
+          })
+
+    const report = {
+      title: "Relatório do Biodigestor",
+      date: fmtDate(now),
+      periodMonth: `${fmtDate(monthFrom)} — ${fmtDate(addDays(monthTo, -1))}`,
+      stats: {
+        wasteProcessed: `${fmtInt.format(Math.round(monthAgg.waste))} kg`,
+        energyGenerated: `${fmtInt.format(Math.round(monthAgg.energy))} kWh`,
+        efficiency: monthEff === null ? "—" : `${fmtNum.format(monthEff)}%`,
+        taxSavings: fmtBRL.format(monthAgg.tax),
+      },
+      activities,
+    }
+
+    return report
+  }, [data])
+
+  /** PDF robusto (com fallback se libs não estiverem instaladas) */
+const exportToPDF = async () => {
   if (typeof window === "undefined") return
   try {
     const report = await buildReportData()
@@ -84,7 +155,6 @@ export function ExportButtons({ data = [], filename = "biodigester-report" }: Ex
     const jsPDFCtor = (jspdfMod as any).jsPDF || (jspdfMod as any).default?.jsPDF || (jspdfMod as any).default
     if (!jsPDFCtor) {
       throw new Error("jsPDF não encontrado no módulo 'jspdf'. Verifique a instalação/versão.")
->>>>>>> Stashed changes
     }
 
     // autotable v3 exporta default (função)
@@ -153,19 +223,29 @@ export function ExportButtons({ data = [], filename = "biodigester-report" }: Ex
 }
 
 
+  /** CSV (mesma fonte de dados do PDF) */
   const exportToCSV = async () => {
     try {
-      const csvData = [
+      const report = await buildReportData()
+      const rows: string[][] = [
+        ["Relatório do Biodigestor"],
+        ["Data do Relatório", report.date],
+        ["Período (mês)", report.periodMonth],
+        [""],
+        ["ESTATÍSTICAS"],
+        ["Métrica", "Valor"],
+        ["Resíduos Processados", report.stats.wasteProcessed],
+        ["Energia Gerada", report.stats.energyGenerated],
+        ["Eficiência Média", report.stats.efficiency],
+        ["Economia Fiscal", report.stats.taxSavings],
+        [""],
+        ["ATIVIDADES RECENTES"],
         ["Data", "Atividade", "Status", "Valor"],
-        ["2024-01-15", "Resíduos Processados", "Normal", "180 kg"],
-        ["2024-01-15", "Energia Gerada", "Normal", "125 kWh"],
-        ["2024-01-14", "Eficiência do Sistema", "Ótimo", "92%"],
-        ["2024-01-14", "Economia Fiscal", "Calculado", "R$ 3,240"],
-        ["2024-01-13", "Manutenção", "Concluído", "Preventiva"],
+        ...report.activities.map((a) => [a.date, a.activity, a.status, a.value ?? ""]),
       ]
 
-      const csvContent = csvData.map((row) => row.join(",")).join("\n")
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+      const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n")
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href = url
@@ -175,63 +255,17 @@ export function ExportButtons({ data = [], filename = "biodigester-report" }: Ex
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
 
-      toast({
-        title: "CSV exportado",
-        description: "Dados exportados em formato CSV com sucesso.",
-      })
-    } catch (error) {
+      toast({ title: "CSV exportado", description: "Dados exportados com sucesso." })
+    } catch (error: any) {
+      console.error("[exportToCSV] erro:", error)
       toast({
         title: "Erro na exportação",
-        description: "Não foi possível exportar o CSV.",
+        description: error?.message || "Não foi possível exportar o CSV.",
         variant: "destructive",
       })
     }
   }
 
-<<<<<<< Updated upstream
-  const exportToExcel = async () => {
-    try {
-      const excelData = [
-        ["Relatório do Biodigestor", "", "", ""],
-        ["Data do Relatório", new Date().toLocaleDateString("pt-BR"), "", ""],
-        ["", "", "", ""],
-        ["ESTATÍSTICAS GERAIS", "", "", ""],
-        ["Métrica", "Valor", "Unidade", "Status"],
-        ["Resíduos Processados", "2450", "kg", "Normal"],
-        ["Energia Gerada", "1850", "kWh", "Normal"],
-        ["Eficiência do Sistema", "92", "%", "Ótimo"],
-        ["Economia Fiscal", "3240", "R$", "Calculado"],
-        ["", "", "", ""],
-        ["ATIVIDADES RECENTES", "", "", ""],
-        ["Data", "Atividade", "Status", "Observações"],
-        ["15/01/2024", "Manutenção preventiva", "Concluído", "Sistema funcionando perfeitamente"],
-        ["14/01/2024", "Produção de energia", "Normal", "125 kWh gerados"],
-        ["13/01/2024", "Processamento de resíduos", "Normal", "180 kg processados"],
-      ]
-
-      const csvContent = excelData.map((row) => row.join(",")).join("\n")
-      const blob = new Blob([csvContent], { type: "application/vnd.ms-excel" })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement("a")
-      a.href = url
-      a.download = `${filename}.xlsx`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-
-      toast({
-        title: "Excel exportado",
-        description: "Relatório em Excel foi baixado com sucesso.",
-      })
-    } catch (error) {
-      toast({
-        title: "Erro na exportação",
-        description: "Não foi possível exportar o Excel.",
-        variant: "destructive",
-      })
-    }
-=======
   /** Excel (usa xlsx; se não instalado, cai para CSV) */
 const exportToExcel = async () => {
   if (typeof window === "undefined") return
@@ -386,8 +420,9 @@ const exportToExcel = async () => {
       description: error?.message || "Não foi possível exportar o Excel.",
       variant: "destructive",
     })
->>>>>>> Stashed changes
   }
+}
+
 
   return (
     <div className="flex gap-2 flex-wrap">
