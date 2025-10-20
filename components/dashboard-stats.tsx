@@ -9,6 +9,10 @@ interface DashboardData {
   energyGenerated: number
   wasteProcessed: number
   taxSavings: number
+  // variações percentuais mês a mês
+  changeWaste: number
+  changeEnergy: number
+  changeTax: number
 }
 
 type IndicatorRow = {
@@ -17,8 +21,23 @@ type IndicatorRow = {
   tax_savings: number | null
   measured_at?: string | null
   created_at?: string | null
-  // user_id?: string | null // <- se existir e quiser filtrar por usuário
-  // company_id?: string | null // <- se existir e quiser filtrar por empresa
+}
+
+function devLog(...args: any[]) {
+  if (process.env.NODE_ENV !== "production") {
+    try { (globalThis as any)?.console?.warn?.(...args) } catch {}
+  }
+}
+
+function fmtPct(n: number) {
+  const sign = n >= 0 ? "+" : ""
+  return `${sign}${n.toFixed(1)}%`
+}
+
+function monthKey(d: Date) {
+  const y = d.getFullYear()
+  const m = (d.getMonth() + 1).toString().padStart(2, "0")
+  return `${y}-${m}` // YYYY-MM
 }
 
 export function DashboardStats() {
@@ -27,11 +46,14 @@ export function DashboardStats() {
     energyGenerated: 0,
     wasteProcessed: 0,
     taxSavings: 0,
+    changeWaste: 0,
+    changeEnergy: 0,
+    changeTax: 0,
   })
 
   useEffect(() => {
     setMounted(true)
-    loadDashboardData()
+    void loadDashboardData()
 
     const interval = setInterval(loadDashboardData, 30_000)
     return () => clearInterval(interval)
@@ -39,46 +61,105 @@ export function DashboardStats() {
 
   const loadDashboardData = async () => {
     try {
-      // if (typeof navigator !== "undefined" && !navigator.onLine) return
+      // Pega do mês passado até agora para reduzir volume
+      const now = new Date()
+      const startPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+      const isoStartPrev = startPrevMonth.toISOString()
 
-      let query = supabase
+      const baseSelect =
+        "energy_generated, waste_processed, tax_savings, measured_at, created_at"
+
+      // Busca registros desde o início do mês passado.
+      // Usamos OR porque measured_at pode estar nulo em alguns registros.
+      const { data, error } = await supabase
         .from("biodigester_indicators")
-        .select("energy_generated, waste_processed, tax_savings, measured_at, created_at")
-
-      // 🔒 Se precisar escopo por usuário/empresa, habilite um destes:
-      // const { data: auth } = await supabase.auth.getUser()
-      // const uid = auth.user?.id
-      // if (uid) query = query.eq("user_id", uid)
-      // query = query.eq("company_id", "<id-da-empresa>")
-
-      // Ordena pelo campo temporal (usa measured_at se existir, senão created_at)
-      // como não dá pra ordenar por coalesce no PostgREST simples, tentamos measured_at e,
-      // caso dê erro por ausência da coluna, caímos em created_at.
-      let { data, error } = await query
+        .select(baseSelect)
+        .or(`measured_at.gte.${isoStartPrev},created_at.gte.${isoStartPrev}`)
         .order("measured_at", { ascending: false, nullsFirst: false })
-        .limit(1)
-      
-      if (error) {
-        // fallback: tentar por created_at
-        const fallback = await supabase
-          .from("biodigester_indicators")
-          .select("energy_generated, waste_processed, tax_savings, measured_at, created_at")
-          .order("created_at", { ascending: false, nullsFirst: false })
-          .limit(1)
+        .limit(1000)
 
-        data = fallback.data
-        if (fallback.error) throw fallback.error
+      if (error) {
+        // fallback: tenta ordenar por created_at caso measured_at não exista
+        devLog("[DashboardStats] erro por measured_at, tentando created_at:", error)
+        const fb = await supabase
+          .from("biodigester_indicators")
+          .select(baseSelect)
+          .gte("created_at", isoStartPrev)
+          .order("created_at", { ascending: false, nullsFirst: false })
+          .limit(1000)
+
+        if (fb.error) throw fb.error
+        computeAndSet(fb.data ?? [])
+        return
       }
 
-      const row: IndicatorRow | undefined = data?.[0]
-      setDashboardData({
-        energyGenerated: Number(row?.energy_generated ?? 0),
-        wasteProcessed: Number(row?.waste_processed ?? 0),
-        taxSavings: Number(row?.tax_savings ?? 0),
-      })
-    } catch {
-      // logger silencioso; os cards ficam com zero em caso de falha
+      computeAndSet(data ?? [])
+    } catch (e) {
+      devLog("[DashboardStats] falha geral:", e)
+      // mantém zeros silenciosamente
     }
+  }
+
+  const computeAndSet = (rows: IndicatorRow[]) => {
+    // Agrega por mês (YYYY-MM): soma das métricas
+    const bucket = new Map<
+      string,
+      { waste: number; energy: number; tax: number }
+    >()
+
+    for (const r of rows) {
+      const dateStr = r.measured_at ?? r.created_at
+      if (!dateStr) continue
+      const d = new Date(dateStr)
+      const key = monthKey(d)
+      const agg = bucket.get(key) ?? { waste: 0, energy: 0, tax: 0 }
+      agg.waste += Number(r.waste_processed ?? 0)
+      agg.energy += Number(r.energy_generated ?? 0)
+      agg.tax += Number(r.tax_savings ?? 0)
+      bucket.set(key, agg)
+    }
+
+    // Determina mês atual e mês anterior com base na data atual
+    const now = new Date()
+    const currKey = monthKey(now)
+    const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+    const prevKey = monthKey(prevMonthDate)
+
+    // Se não existir dado do mês atual (ex.: estamos no início do mês),
+    // caímos para o último mês disponível da série
+    let current = bucket.get(currKey)
+    let previous = bucket.get(prevKey)
+
+    if (!current) {
+      // pega o mês mais recente existente nos dados
+      const keys = Array.from(bucket.keys()).sort() // ordem crescente
+      const lastKey = keys.at(-1)
+      const lastPrevKey = keys.at(-2)
+      current = lastKey ? bucket.get(lastKey)! : { waste: 0, energy: 0, tax: 0 }
+      previous = lastPrevKey ? bucket.get(lastPrevKey)! : { waste: 0, energy: 0, tax: 0 }
+    }
+
+    const calcChange = (curr: number, prev: number) => {
+      if (!prev || Math.abs(prev) < 1e-9) return 0
+      return ((curr - prev) / prev) * 100
+    }
+
+    const wasteNow = current?.waste ?? 0
+    const energyNow = current?.energy ?? 0
+    const taxNow = current?.tax ?? 0
+
+    const wastePrev = previous?.waste ?? 0
+    const energyPrev = previous?.energy ?? 0
+    const taxPrev = previous?.tax ?? 0
+
+    setDashboardData({
+      energyGenerated: energyNow,
+      wasteProcessed: wasteNow,
+      taxSavings: taxNow,
+      changeWaste: calcChange(wasteNow, wastePrev),
+      changeEnergy: calcChange(energyNow, energyPrev),
+      changeTax: calcChange(taxNow, taxPrev),
+    })
   }
 
   if (!mounted) return null
@@ -87,22 +168,23 @@ export function DashboardStats() {
     wasteProcessed: {
       value: dashboardData.wasteProcessed.toFixed(1),
       unit: "kg",
-      change: "+12.5%",
-      increasing: true,
+      change: fmtPct(dashboardData.changeWaste),
+      increasing: dashboardData.changeWaste >= 0,
     },
     energyGenerated: {
       value: dashboardData.energyGenerated.toFixed(1),
       unit: "kWh",
-      change: "+8.2%",
-      increasing: true,
+      change: fmtPct(dashboardData.changeEnergy),
+      increasing: dashboardData.changeEnergy >= 0,
     },
     taxDeduction: {
       value: `R$ ${dashboardData.taxSavings.toFixed(2)}`,
       unit: "",
-      change: "+15.3%",
-      increasing: true,
+      change: fmtPct(dashboardData.changeTax),
+      increasing: dashboardData.changeTax >= 0,
     },
     efficiency: {
+      // se quiser, calcule eficiência real com outra tabela/campo
       value: "94.2",
       unit: "%",
       change: "+1.2%",
@@ -176,7 +258,6 @@ export function DashboardStats() {
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-sm font-medium text-green-800">Imposto Abatido</CardTitle>
           <div className="rounded-full bg-blue-100 p-2">
-            {/* Ícone custom */}
             <svg
               xmlns="http://www.w3.org/2000/svg"
               width="24"
