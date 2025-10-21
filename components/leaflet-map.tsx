@@ -4,6 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap } from "react-leaflet";
 import L, { LatLngTuple } from "leaflet";
 import "leaflet/dist/leaflet.css";
+import ExcelJS from "exceljs";
+import { Chart, registerables } from "chart.js";
+Chart.register(...registerables);
 import { supabase } from "@/lib/supabase/client";
 
 // Corrige o ícone padrão do Leaflet no React
@@ -17,7 +20,7 @@ L.Icon.Default.mergeOptions({
 type LeafletMapProps = { className?: string };
 
 type Marcador = {
-  dbId?: string;          // <<-- id da linha no Supabase
+  dbId?: string;
   nome: string;
   descricao: string;
   pos: LatLngTuple;
@@ -159,6 +162,15 @@ export default function LeafletMap({ className = "" }: LeafletMapProps) {
   const [cep, setCep] = useState("");
   const mapRef = useRef<any>(null);
 
+  // 🔧 CORREÇÃO DO ERRO DO LEAFLET
+  useEffect(() => {
+    const container = L.DomUtil.get("map");
+    if (container != null) {
+      // evita erro "Map container is already initialized"
+      (container as any)._leaflet_id = null;
+    }
+  }, []);
+
   // Carrega endereços salvos no Supabase e desenha
   useEffect(() => {
     (async () => {
@@ -208,16 +220,13 @@ export default function LeafletMap({ className = "" }: LeafletMapProps) {
         const lat = e.latlng.lat;
         const lon = e.latlng.lng;
 
-        // Obtem endereço e salva antes de desenhar (assim já teremos o dbId)
         const endereco = (await reverseGeocode(lat, lon)) || `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
         const dbId = await insertAddress(endereco);
         if (!dbId) {
-          // se falhar o insert, não adiciona marcador persistido
           setModoClique(false);
           return;
         }
 
-        // adiciona no mapa com dbId
         setMarcadores((m) => [
           ...m,
           { dbId, nome, descricao: descricaoUser || endereco, pos: [lat, lon] as LatLngTuple },
@@ -260,6 +269,106 @@ export default function LeafletMap({ className = "" }: LeafletMapProps) {
   const limparMarcadores = () =>
     setMarcadores(cidades.map((c) => ({ nome: c.nome, descricao: c.info, pos: c.pos })));
 
+  const exportToExcel = async () => {
+    try {
+      // Preparar dados
+      const rows = marcadores.map((m) => [
+        m.nome,
+        m.descricao,
+        Array.isArray(m.pos) ? m.pos[0] : "",
+        Array.isArray(m.pos) ? m.pos[1] : "",
+        m.dbId ?? "",
+      ] as (string | number)[]);
+
+      // Criar canvas e desenhar gráfico (ex: contagem de marcadores por cidade fixa)
+      const canvas = document.createElement("canvas");
+      canvas.width = 800;
+      canvas.height = 400;
+      const ctx = canvas.getContext("2d");
+
+      // Exemplo de dados para o gráfico: número de marcadores por nome (agregado)
+      const counts: Record<string, number> = {};
+      marcadores.forEach((m) => {
+        const key = m.nome || "Sem nome";
+        counts[key] = (counts[key] ?? 0) + 1;
+      });
+      const labels = Object.keys(counts);
+      const dataVals = labels.map((l) => counts[l]);
+
+      if (ctx) {
+        // Criar gráfico
+        // eslint-disable-next-line no-unused-vars
+        const chart = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels,
+            datasets: [
+              {
+                label: "Quantidade de marcadores",
+                data: dataVals,
+                backgroundColor: "rgba(54, 162, 235, 0.6)",
+                borderColor: "rgba(54, 162, 235, 1)",
+                borderWidth: 1,
+              },
+            ],
+          },
+          options: {
+            responsive: false,
+            plugins: {
+              legend: { display: true },
+            },
+          },
+        });
+
+        // Aguardar próxima frame para garantir render do chart
+        await new Promise((res) => setTimeout(res, 250));
+
+        const dataUrl = canvas.toDataURL("image/png");
+
+        // Criar workbook com ExcelJS
+        const wb = new ExcelJS.Workbook();
+        const ws = wb.addWorksheet("Marcadores");
+
+        // Cabeçalho
+        ws.addRow(["Nome", "Descrição", "Latitude", "Longitude", "DB_ID"]);
+        rows.forEach((r) => ws.addRow(r));
+
+        // Inserir imagem do gráfico
+        const base64 = dataUrl.split(",")[1];
+        const imageId = wb.addImage({ base64, extension: "png" });
+        // Posicionar imagem (células aproximadas)
+        ws.addImage(imageId, {
+          tl: { col: 6, row: 1 },
+          br: { col: 16, row: 20 },
+          editAs: "oneCell",
+        });
+
+        // Ajustes de largura para legibilidade
+        ws.columns = [
+          { width: 30 },
+          { width: 50 },
+          { width: 15 },
+          { width: 15 },
+          { width: 20 },
+        ];
+
+        const buf = await wb.xlsx.writeBuffer();
+        const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `marcadores_${new Date().toISOString().slice(0, 10)}.xlsx`;
+        a.click();
+        URL.revokeObjectURL(url);
+      } else {
+        throw new Error("Falha ao obter contexto do canvas para gerar gráfico.");
+      }
+    } catch (err) {
+      console.error("Erro ao exportar Excel com gráfico:", err);
+      alert("Falha ao exportar Excel com gráfico. Veja o console para mais detalhes.");
+    }
+  };
+
   const mudarEstilo = () => setEstilo((e) => (e + 1) % estilosMapa.length);
 
   const irPara = (pos: LatLngTuple) => {
@@ -293,17 +402,16 @@ export default function LeafletMap({ className = "" }: LeafletMapProps) {
       setCoordenadas(pos);
       setZoom(15);
       setCep("");
-    } catch (err: any) {
+    } catch {
       alert("Não foi possível localizar o CEP informado.");
     }
   };
 
-  // Remover marcador (se tiver dbId, apaga no banco também)
   const removerMarcador = async (idx: number) => {
     const marker = marcadores[idx];
     if (marker?.dbId) {
       const ok = await deleteAddressById(marker.dbId);
-      if (!ok) return; // se falhar a remoção no banco, não tira da UI
+      if (!ok) return;
     }
     setMarcadores((items) => items.filter((_, i) => i !== idx));
   };
@@ -316,11 +424,9 @@ export default function LeafletMap({ className = "" }: LeafletMapProps) {
         </h2>
 
         <div className="flex flex-wrap gap-3 mb-3">
-          {/* Minha Localização */}
           <button
             className="px-6 py-3 rounded-xl font-semibold flex items-center gap-2 shadow-sm bg-emerald-500 hover:bg-emerald-600 text-white transition-all"
             onClick={minhaLocalizacao}
-            title="Usar minha localização atual"
           >
             <span role="img" aria-label="gps">🛰️</span> Minha Localização
           </button>
@@ -334,11 +440,9 @@ export default function LeafletMap({ className = "" }: LeafletMapProps) {
               >
                 <span role="img" aria-label="pin">📍</span> {m.nome}
               </button>
-              {/* deletável apenas para os adicionados/armazenados (i >= cidades.length) */}
               {i >= cidades.length && (
                 <button
                   className="ml-1 px-2 py-2 rounded-full bg-red-200 hover:bg-red-400 text-red-700 text-lg"
-                  title="Remover marcador"
                   onClick={() => removerMarcador(i)}
                 >
                   🗑️
@@ -354,6 +458,12 @@ export default function LeafletMap({ className = "" }: LeafletMapProps) {
             onClick={() => setModoClique(true)}
           >
             <span role="img" aria-label="add">➕</span> {modoClique ? "Clique no mapa" : "Adicionar Marcador"}
+          </button>
+          <button
+            className="px-6 py-3 rounded-xl font-semibold flex items-center gap-2 shadow-sm bg-indigo-600 hover:bg-indigo-700 text-white transition-all"
+            onClick={() => exportToExcel()}
+          >
+            <span role="img" aria-label="excel">📥</span> Exportar Excel
           </button>
           <button
             className="px-6 py-3 rounded-xl font-semibold flex items-center gap-2 shadow-sm bg-orange-400 hover:bg-orange-500 text-white transition-all"
@@ -395,6 +505,7 @@ export default function LeafletMap({ className = "" }: LeafletMapProps) {
       </div>
 
       <MapContainer
+        id="map" // 👈 ESSENCIAL para correção
         center={coordenadas}
         zoom={zoom}
         whenReady={() => {}}
